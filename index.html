@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <title>Tense Builder</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot" aria-hidden="true"></span>
+      <div class="brandText">
+        <div class="brandTitle">Tense Builder</div>
+        <div class="brandSub">Speak • Compare • Level up</div>
+      </div>
+    </div>
+
+    <div class="topbarRight">
+      <button id="newUnitBtn" class="btn btnPrimary">New unit</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="grid">
+      <!-- MAIN -->
+      <section class="card">
+        <div class="cardHeader">
+          <div>
+            <h2>Current target</h2>
+            <p class="muted">Short → longer → level up <span class="muted2">(red words = practice)</span></p>
+          </div>
+
+          <div class="stats" aria-label="stats">
+            <div class="stat"><div class="k">Level</div><div id="levelVal" class="v">1</div></div>
+            <div class="stat"><div class="k">Score</div><div id="scoreVal" class="v">0</div></div>
+            <div class="stat"><div class="k">Streak</div><div id="streakVal" class="v">0</div></div>
+            <div class="stat"><div class="k">Tol</div><div id="tolVal" class="v">0.65</div></div>
+          </div>
+        </div>
+
+        <div id="targetBox" class="targetBox" role="region" aria-label="target">
+          <div id="targetText" class="targetText">—</div>
+          <div id="targetHint" class="targetHint">Say it notedly. Then press <b>Check</b>.</div>
+        </div>
+
+        <div class="controls">
+          <button id="speakBtn" class="btn"><span class="ico">🔊</span>Speak</button>
+          <button id="micBtn" class="btn"><span class="ico">🎙️</span>Start mic</button>
+          <button id="translateBtn" class="btn"><span class="ico">🌐</span>Translate</button>
+          <button id="answerBtn" class="btn"><span class="ico">👁️</span>Show answer</button>
+        </div>
+
+        <div class="twoCol">
+          <div class="panel">
+            <div class="panelTitle">What the mic heard</div>
+            <textarea id="heardInput" class="textarea" rows="3" placeholder="Tap Start mic, speak, then press Check… (or type here)"></textarea>
+            <div class="panelActions">
+              <button id="checkBtn" class="btn btnOk">✅ Check</button>
+              <button id="skipBtn" class="btn">⏭️ Skip</button>
+            </div>
+            <div id="statusLine" class="statusLine">Ready.</div>
+          </div>
+
+          <div class="panel">
+            <div class="panelTitle">Word feedback</div>
+            <div id="wordFeedback" class="wordFeedback">—</div>
+          </div>
+        </div>
+
+        <div class="medalsBlock">
+          <div class="medalsHead">
+            <div>
+              <div class="medalsTitle">Rescued characters</div>
+              <div class="muted">Finish Level 100 to unlock a character.</div>
+            </div>
+            <div id="medalsCount" class="medalsCount">0/15</div>
+          </div>
+          <div id="medalsGrid" class="medalsGrid" aria-label="medals"></div>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <aside class="card settingsCard">
+        <div class="cardHeader">
+          <div>
+            <h2>Settings</h2>
+            <p class="muted">Make it easier + choose tense</p>
+          </div>
+        </div>
+
+        <div class="form">
+          <label class="field">
+            <span>Mode</span>
+            <select id="modeSel" class="select">
+              <option value="statements">Statements</option>
+              <option value="questions">Questions</option>
+            </select>
+          </label>
+
+          <label class="field" id="qTypeField">
+            <span>Question type</span>
+            <select id="qTypeSel" class="select">
+              <option value="yesno">Yes/No</option>
+              <option value="wh">WH-Question</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Tense</span>
+            <select id="tenseSel" class="select">
+              <option value="present_simple">Present Simple</option>
+              <option value="present_continuous">Present Continuous</option>
+              <option value="past_simple">Past Simple</option>
+              <option value="past_continuous">Past Continuous</option>
+              <option value="present_perfect">Present Perfect</option>
+              <option value="future_will">Future (will)</option>
+              <option value="modals">Modals (can/should/must/might)</option>
+              <option value="conditional_0">Conditional 0</option>
+              <option value="conditional_1">Conditional 1</option>
+              <option value="conditional_2">Conditional 2</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Voice (TTS)</span>
+            <select id="voiceSel" class="select"></select>
+          </label>
+
+          <label class="field">
+            <span>Recognition language</span>
+            <select id="recLangSel" class="select">
+              <option value="en-US">English (US)</option>
+              <option value="en-GB">English (UK)</option>
+              <option value="en-AU">English (AU)</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Tolerance</span>
+            <div class="rangeRow">
+              <input id="tolRange" type="range" min="0.55" max="0.90" step="0.01" value="0.65" />
+              <span id="tolLabel" class="pill">0.65</span>
+            </div>
+            <div class="muted2">Lower = more tolerant (accepts more mistakes).</div>
+          </label>
+
+          <label class="checkRow">
+            <input id="antiEchoChk" type="checkbox" checked />
+            <span>Anti‑echo (pause mic while TTS speaks)</span>
+          </label>
+
+          <div class="muted2 tip">
+            Tip: Mic works best on <b>https</b> (GitHub Pages). On <b>file://</b> the browser may ask permission often.
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <!-- MODAL -->
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="reward modal">
+    <div class="modalCard">
+      <div id="modalTitle" class="modalTitle">You rescued a character!</div>
+      <div class="modalBody">
+        <img id="modalImg" class="modalImg" alt="character" />
+        <div class="modalText">
+          <div id="modalName" class="modalName">—</div>
+          <div id="modalMsg" class="modalMsg">—</div>
+        </div>
+      </div>
+      <div class="modalActions">
+        <button id="modalOk" class="btn btnPrimary">Awesome</button>
+      </div>
+    </div>
+    <div class="modalBackdrop"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
