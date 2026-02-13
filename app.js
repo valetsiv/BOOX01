@@ -1,598 +1,885 @@
-(() => {
-  if (window.__TB_INITED__) return;
-  window.__TB_INITED__ = true;
+/* =========================================================
+   Tense Builder — rebuild (stable)
+   Fixes requested:
+   ✅ 1) Dark dropdown (CSS: color-scheme + option bg)
+   ✅ 2) Sentences start short and grow as you pass checks
+   ✅ 3) Bigger tolerance (default 0.65 + LCS similarity)
+   ========================================================= */
 
-  // =========================
-  // DOM
-  // =========================
+(() => {
+  // -------------------------
+  // DOM helpers
+  // -------------------------
   const $ = (id) => document.getElementById(id);
 
-  const btnNew = $("btnNew");
-  const btnSpeak = $("btnSpeak");
-  const btnMic = $("btnMic");
-  const btnTranslate = $("btnTranslate");
-  const btnShow = $("btnShow");
-  const btnCheck = $("btnCheck");
-  const btnSkip = $("btnSkip");
-  const btnModalOk = $("btnModalOk");
+  const el = {
+    targetText: $("targetText"),
+    targetHint: $("targetHint"),
+    levelVal: $("levelVal"),
+    scoreVal: $("scoreVal"),
+    streakVal: $("streakVal"),
+    tolVal: $("tolVal"),
+    tolRange: $("tolRange"),
+    tolLabel: $("tolLabel"),
 
-  const targetText = $("targetText");
-  const heardText = $("heardText");
-  const feedback = $("feedback");
-  const glossary = $("glossary");
-  const statusEl = $("status");
+    heardInput: $("heardInput"),
+    wordFeedback: $("wordFeedback"),
+    statusLine: $("statusLine"),
 
-  const statLevel = $("statLevel");
-  const statScore = $("statScore");
-  const statStreak = $("statStreak");
+    speakBtn: $("speakBtn"),
+    micBtn: $("micBtn"),
+    translateBtn: $("translateBtn"),
+    answerBtn: $("answerBtn"),
+    checkBtn: $("checkBtn"),
+    skipBtn: $("skipBtn"),
+    newUnitBtn: $("newUnitBtn"),
 
-  const selMode = $("selMode");
-  const selQType = $("selQType");
-  const selTense = $("selTense");
-  const selVoice = $("selVoice");
-  const selRecLang = $("selRecLang");
-  const chkAntiEcho = $("chkAntiEcho");
+    modeSel: $("modeSel"),
+    qTypeSel: $("qTypeSel"),
+    qTypeField: $("qTypeField"),
+    tenseSel: $("tenseSel"),
+    voiceSel: $("voiceSel"),
+    recLangSel: $("recLangSel"),
+    antiEchoChk: $("antiEchoChk"),
 
-  const medalsEl = $("medals");
-  const medalCount = $("medalCount");
+    medalsGrid: $("medalsGrid"),
+    medalsCount: $("medalsCount"),
 
-  const modal = $("modal");
-  const modalImg = $("modalImg");
-  const modalText = $("modalText");
-
-  // =========================
-  // STATE
-  // =========================
-  const MAX_LEVEL = 100;
-
-  let level = 1;
-  let score = 0;
-  let streak = 0;
-
-  let currentTarget = "";
-  let currentTokens = [];
-  let unitCompleted = false;
-
-  let ttsVoice = null;
-  let ttsSpeaking = false;
-
-  // Speech Recognition
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  let recognizer = null;
-  let sessionActive = false;
-
-  // Medals
-    const MEDAL_ROSTER = [
-    { id:"zibra", name:"ZIBRA", img:"assets/medals/zibra.png" },
-    { id:"patapim", name:"PATAPIM", img:"assets/medals/patapim.png" },
-    { id:"gangster", name:"GANGSTER", img:"assets/medals/gangster.png" },
-    { id:"shimpanzinni", name:"SHIMPANZINNI", img:"assets/medals/shimpanzinni.png" },
-    { id:"lirili_larila", name:"LIRILI LARILA", img:"assets/medals/lirili_larila.png" },
-    { id:"frigo_camelo", name:"FRIGO CAMELO", img:"assets/medals/frigo_camelo.png" },
-    { id:"bulbito", name:"BULBITO", img:"assets/medals/bulbito.png" },
-    { id:"bombardino", name:"BOMBARDINO", img:"assets/medals/bombardino.png" },
-    { id:"balerina", name:"BALLERINA", img:"assets/medals/balerina.png" },
-    { id:"burbaloni", name:"BURBALONI", img:"assets/medals/burbaloni.png" },
-    { id:"trulimero", name:"TRULIMERO", img:"assets/medals/trulimero.png" },
-    { id:"tralalero", name:"TRALALERO", img:"assets/medals/tralalero.png" },
-    { id:"bananita", name:"BANANITA", img:"assets/medals/bananita.png" },
-    { id:"havana", name:"HAVANA", img:"assets/medals/havana.png" },
-    { id:"tung_tung", name:"TUNG-TUNG", img:"assets/medals/tung_tung.png" },
-  ];
-
-  const LS_UNLOCK = "tb_unlocked_v1";
-  const unlocked = new Set(JSON.parse(localStorage.getItem(LS_UNLOCK) || "[]"));
-
-  // =========================
-  // DATA — simple but coherent
-  // =========================
-  const SUBJ = ["I","you","we","they","he","she"];
-  const OBJ = ["my schedule","a new lesson","the plan","my English","this project","the meeting","the timeline"];
-  const PLACES = ["in Bogotá","at home","at work","in class","with my team","online"];
-  const TIMES = ["today","this week","in the morning","after class","right now","these days"];
-  const REASONS = ["because it matters","because I want to improve","because it is important","because we have a deadline"];
-  const CONTRAST = ["however, I stay calm","although it is hard, I continue","but I keep going"];
-  const RESULTS = ["so I practice again","therefore I focus","so we finish the task"];
-  const ADV = ["already","just","therefore","however","both","the same"];
-
-  // very small ES glossary to avoid wrong full translations
-  const ES = {
-    i:"yo", you:"tú", we:"nosotros", they:"ellos", he:"él", she:"ella",
-    a:"un/una", an:"un/una", the:"el/la/los/las",
-    new:"nuevo", lesson:"lección", schedule:"cronograma", plan:"plan",
-    english:"inglés", project:"proyecto", meeting:"reunión", timeline:"línea de tiempo",
-    in:"en", at:"en", on:"en", with:"con", today:"hoy", week:"semana", morning:"mañana",
-    because:"porque", important:"importante", however:"sin embargo", therefore:"por lo tanto",
-    already:"ya", just:"acabo de", both:"ambos", same:"mismo",
-    do:"hacer", does:"hace", did:"hizo", have:"he/has", has:"ha", will:"haré/hará"
+    modal: $("modal"),
+    modalTitle: $("modalTitle"),
+    modalImg: $("modalImg"),
+    modalName: $("modalName"),
+    modalMsg: $("modalMsg"),
+    modalOk: $("modalOk"),
   };
 
-  function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
-  function chance(p){ return Math.random() < p; }
+  // -------------------------
+  // State
+  // -------------------------
+  const LS_UNLOCKED = "tb_unlocked_v1";
+  const LS_PROGRESS = "tb_progress_v1";
 
-  // =========================
-  // TENSE ENGINE (basic)
-  // =========================
-  function buildBase(mode, qType, tense){
-    const s = pick(SUBJ);
-    const obj = pick(OBJ);
-    const place = pick(PLACES);
-    const time = pick(TIMES);
+  const state = {
+    level: 1,             // unit number
+    score: 0,             // 0..99 (points inside unit)
+    streak: 0,            // consecutive correct checks
+    tol: 0.65,            // default bigger tolerance
+    showTranslation: false,
+    showAnswer: false,
 
-    if (tense === "present_simple"){
-      if (mode === "questions"){
-        if (qType === "wh"){
-          const wh = pick(["What","Where","When","Why","How"]);
-          return `${wh} do ${s.toLowerCase()} work on ${obj}?`;
-        }
-        return `Do ${s.toLowerCase()} work on ${obj}?`;
-      }
-      return `${s} work on ${obj} ${place} ${time}.`;
-    }
+    // current exercise (growing)
+    ex: {
+      segmentsEn: ["—"],
+      segmentsEs: ["—"],
+      fullEn: "—",
+      fullEs: "—",
+      idx: 0,
+    },
 
-    if (tense === "present_cont"){
-      if (mode === "questions"){
-        return `Are ${s.toLowerCase()} working on ${obj} ${place}?`;
-      }
-      return `${s} am/are/is working on ${obj} ${place} ${time}.`
-        .replace("I am/are/is","I am").replace("you am/are/is","you are")
-        .replace("we am/are/is","we are").replace("they am/are/is","they are")
-        .replace("he am/are/is","he is").replace("she am/are/is","she is");
-    }
+    // mic
+    recognition: null,
+    micActive: false,
+    micWasActiveBeforeTTS: false,
 
-    if (tense === "past_cont"){
-      if (mode === "questions"){
-        return `Were ${s.toLowerCase()} working on ${obj} ${place}?`
-          .replace("were i","was I").replace("were he","was he").replace("were she","was she");
-      }
-      return `${s} was/were working on ${obj} ${place} ${time}.`
-        .replace("I was/were","I was").replace("you was/were","you were")
-        .replace("we was/were","we were").replace("they was/were","they were")
-        .replace("he was/were","he was").replace("she was/were","she was");
-    }
+    // voices
+    voices: [],
+  };
 
-    if (tense === "present_perf"){
-      if (mode === "questions"){
-        return `Have ${s.toLowerCase()} improved ${obj}?`
-          .replace("have he","Has he").replace("have she","Has she");
-      }
-      return `${s} have/has improved ${obj} already.`
-        .replace("I have/has","I have").replace("you have/has","you have")
-        .replace("we have/has","we have").replace("they have/has","they have")
-        .replace("he have/has","he has").replace("she have/has","she has");
-    }
+  // -------------------------
+  // Characters / medals
+  // -------------------------
+  const characters = [
+    { id:"bombardino",   name:"Bombardino Crocodilo", file:"bombardino.png" },
+    { id:"lirili_larila",name:"Lirili Larila",        file:"lirili_larila.png" },
+    { id:"frigo_camelo", name:"Frigo Camelo",         file:"frigo_camelo.png" },
+    { id:"ballerina",    name:"Ballerina Capuchina",  file:"ballerina.png" },
+    { id:"tung_tung",    name:"Tung Tung Tung Sahur", file:"tung_tung.png" },
 
-    if (tense === "future_will"){
-      if (mode === "questions"){
-        return `Will ${s.toLowerCase()} work on ${obj} ${time}?`;
-      }
-      return `${s} will work on ${obj} ${place} ${time}.`;
-    }
+    { id:"tralalero",    name:"Tralalero",            file:"tralalero.png" },
+    { id:"patapim",      name:"Patapim",              file:"patapim.png" },
+    { id:"gangster",     name:"Gangster",             file:"gangster.png" },
+    { id:"trulimero",    name:"Trulimero",            file:"trulimero.png" },
+    { id:"havana",       name:"Havana",               file:"havana.png" },
+    { id:"burbaloni",    name:"Burbaloni",            file:"burbaloni.png" },
+    { id:"bulbito",      name:"Bulbito",              file:"bulbito.png" },
+    { id:"zibra",        name:"Zibra",                file:"zibra.png" },
+    { id:"bananita",     name:"Bananita",             file:"bananita.png" },
+    { id:"shimpanzinni", name:"Shimpanzinni",         file:"shimpanzinni.png" },
+  ];
 
-    if (tense === "conditional_0"){
-      const cond = `If ${s.toLowerCase()} practice every day, ${s.toLowerCase()} improve.`;
-      return (mode==="questions") ? `What happens if ${s.toLowerCase()} practice every day?` : cond;
-    }
-
-    if (tense === "conditional_1"){
-      const cond = `If ${s.toLowerCase()} practice today, ${s.toLowerCase()} will improve.`;
-      return (mode==="questions") ? `What will happen if ${s.toLowerCase()} practice today?` : cond;
-    }
-
-    if (tense === "conditional_2"){
-      const cond = `If ${s.toLowerCase()} practiced more, ${s.toLowerCase()} would improve.`;
-      return (mode==="questions") ? `What would happen if ${s.toLowerCase()} practiced more?` : cond;
-    }
-
-    if (tense === "modals"){
-      const modal = pick(["can","should","must","might"]);
-      if (mode==="questions"){
-        return `What ${modal} ${s.toLowerCase()} do ${time}?`;
-      }
-      return `${s} ${modal} work on ${obj} ${place}.`;
-    }
-
-    return `${s} work on ${obj}.`;
+  function assetUrl(rel){
+    // robust relative path for GitHub Pages + local
+    if (!rel) return "";
+    const cleaned = rel.startsWith("./") ? rel : "./" + rel.replace(/^\/+/, "");
+    return new URL(cleaned, document.baseURI).toString();
   }
 
-  // Build 100 levels: grow with connectors, keep length reasonable
-  function buildLevels(base, mode){
-    const lvls = [clean(base)];
-    const adds = [
-      () => pick(PLACES),
-      () => pick(TIMES),
-      () => `, ${pick(REASONS)}`,
-      () => `, ${pick(CONTRAST)}`,
-      () => `, ${pick(RESULTS)}`,
-      () => `, ${pick(ADV)}`,
-      () => `, from my perspective`,
-      () => `, on the one hand, it helps`,
-      () => `, on the other hand, it is hard`,
-    ];
-
-    function attach(sentence, add){
-      if (mode === "questions"){
-        if (sentence.endsWith("?")) return clean(sentence.slice(0,-1) + " " + add + "?");
-        return clean(sentence + " " + add);
-      }
-      return clean(sentence + " " + add);
-    }
-
-    while (lvls.length < MAX_LEVEL){
-      let s = lvls[lvls.length-1];
-
-      // reset once so it doesn't become a monster sentence
-      if (lvls.length === 55) s = lvls[0];
-
-      // storytelling starter sometimes (statements only)
-      if (mode !== "questions" && chance(0.18)){
-        const starter = pick(["Then","After that","Suddenly","In the end"]);
-        s = clean(`${starter}, ${s[0].toLowerCase()}${s.slice(1)}`);
-      }
-
-      s = attach(s, adds[lvls.length % adds.length]());
-      lvls.push(s);
-    }
-    return lvls;
-  }
-
-  function clean(s){
-    return String(s)
-      .replace(/\s+/g," ")
-      .replace(/\s+,/g,",")
-      .replace(/am\/are\/is/g,"are")
-      .trim();
-  }
-
-  function tokenize(s){
-    return clean(s)
-      .replace(/[\.,!?]/g,"")
-      .toLowerCase()
-      .split(" ")
-      .filter(Boolean);
-  }
-
-  // =========================
-  // UI helpers
-  // =========================
-  function setStatus(msg, tone="muted"){
-    statusEl.innerHTML = msg;
-    statusEl.style.color = tone==="ok" ? "var(--ok)" : tone==="warn" ? "var(--warn)" : "var(--muted)";
-  }
-
-  function renderStats(){
-    statLevel.textContent = String(level);
-    statScore.textContent = String(score);
-    statStreak.textContent = String(streak);
-  }
-
-  function renderMedals(){
-    medalCount.textContent = `${unlocked.size}/${MEDAL_ROSTER.length}`;
-    medalsEl.innerHTML = "";
-    MEDAL_ROSTER.forEach((m, idx) => {
-      const div = document.createElement("div");
-      div.className = "medal " + (unlocked.has(m.id) ? "unlocked" : "locked");
-      div.dataset.medalId = m.id;
-      const img = document.createElement("img");
-      img.src = m.img;
-      img.onerror = () => { img.src = 'assets/medals/frigo_camelo.png'; };
-      img.alt = m.name;
-      div.appendChild(img);
-      medalsEl.appendChild(div);
-    });
-  }
-
-  function openUnlockModal(medal){
-    // Defensive: medal or image missing
-    if (!medal) return;
-
-    // Always set alt to avoid showing "medal"
-    modalImg.alt = medal.name || "character";
-
-    // Primary: embedded data URI
-    modalImg.src = "";
-    requestAnimationFrame(() => { modalImg.src = medal.img || ''; });
-
-    // Fallback: copy from rendered medal grid
-    modalImg.onerror = () => {
-      const card = document.querySelector(`[data-medal-id="${medal.id}"]`);
-      const img = card ? card.querySelector("img") : null;
-      if (img && img.src) modalImg.src = img.src;
-      modalImg.onerror = null;
-    };
-
-    modalText.textContent = `Awesome! You rescued: ${medal.name}. Keep going!`;
-    modal.hidden = false;
-    speak(`You are doing great. You won ${medal.name}.`);
-  }
-
-  function closeModal(){
-    modal.hidden = true;
-  }
-
-  function tryUnlockAtUnitEnd(){
-    // Only unlock when unit truly finished (level 100)
-    if (!unitCompleted || level !== MAX_LEVEL) return;
-    if (unlocked.size >= MEDAL_ROSTER.length) return;
-
-    const medal = MEDAL_ROSTER[unlocked.size];
-    unlocked.add(medal.id);
-    localStorage.setItem(LS_UNLOCK, JSON.stringify([...unlocked]));
-    renderMedals();
-    openUnlockModal(medal);
-  }
-
-  // =========================
-  // Speech: TTS
-  // =========================
-  function loadVoices(){
-    const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
-    selVoice.innerHTML = "";
-    voices
-      .filter(v => /en/i.test(v.lang))
-      .forEach((v, i) => {
-        const opt = document.createElement("option");
-        opt.value = v.name;
-        opt.textContent = `${v.name} — ${v.lang}`;
-        selVoice.appendChild(opt);
-      });
-
-    // pick a default en voice
-    const first = selVoice.options[0];
-    if (first) selVoice.value = first.value;
-    selectVoice();
-  }
-
-  function selectVoice(){
-    const voices = speechSynthesis.getVoices();
-    const name = selVoice.value;
-    ttsVoice = voices.find(v => v.name === name) || null;
-  }
-
-  function speak(text){
-    if (!window.speechSynthesis) return;
-    if (!text) return;
-
+  function getUnlockedIds(){
     try{
-      speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = selRecLang.value || "en-US";
-      if (ttsVoice) u.voice = ttsVoice;
-      ttsSpeaking = true;
-      u.onend = () => { ttsSpeaking=false; if (chkAntiEcho.checked) {/* no-op */} };
-      u.onerror = () => { ttsSpeaking=false; };
-      speechSynthesis.speak(u);
+      const raw = localStorage.getItem(LS_UNLOCKED);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    }catch(e){ return []; }
+  }
+  function setUnlockedIds(ids){
+    localStorage.setItem(LS_UNLOCKED, JSON.stringify(ids));
+  }
+
+  function saveProgress(){
+    localStorage.setItem(LS_PROGRESS, JSON.stringify({
+      level: state.level,
+      score: state.score,
+      streak: state.streak
+    }));
+  }
+  function loadProgress(){
+    try{
+      const raw = localStorage.getItem(LS_PROGRESS);
+      if(!raw) return;
+      const p = JSON.parse(raw);
+      if (p && typeof p.level === "number") state.level = Math.max(1, Math.floor(p.level));
+      if (p && typeof p.score === "number") state.score = Math.max(0, Math.min(99, Math.floor(p.score)));
+      if (p && typeof p.streak === "number") state.streak = Math.max(0, Math.floor(p.streak));
     }catch(e){}
   }
 
-  // =========================
-  // Speech: Recognition (no getUserMedia)
-  // =========================
-  function ensureRecognizer(){
-    if (!SR){
-      setStatus("Speech recognition is not supported in this browser.", "warn");
-      return false;
+  function renderMedals(){
+    const unlocked = new Set(getUnlockedIds());
+    el.medalsGrid.innerHTML = "";
+    characters.forEach(ch => {
+      const div = document.createElement("div");
+      div.className = "medal" + (unlocked.has(ch.id) ? "" : " locked");
+      const img = document.createElement("img");
+      img.loading = "lazy";
+      img.alt = ch.name;
+      img.src = assetUrl("assets/medals/" + ch.file);
+      img.onerror = () => { img.alt = ch.name + " (missing image)"; };
+      div.appendChild(img);
+
+      if (!unlocked.has(ch.id)){
+        const tag = document.createElement("div");
+        tag.className = "lockTag";
+        tag.innerHTML = '<span class="lockIcon">🔒</span><span>Locked</span>';
+        div.appendChild(tag);
+      }
+      el.medalsGrid.appendChild(div);
+    });
+    const count = getUnlockedIds().length;
+    el.medalsCount.textContent = count + "/" + characters.length;
+  }
+
+  function unlockNextCharacter(){
+    const unlocked = new Set(getUnlockedIds());
+    const next = characters.find(c => !unlocked.has(c.id));
+    if (!next) return null;
+    unlocked.add(next.id);
+    setUnlockedIds([...unlocked]);
+    renderMedals();
+    return next;
+  }
+
+  // -------------------------
+  // Text normalization + similarity
+  // -------------------------
+  const CONTRACTIONS = [
+    ["can't","cannot"],
+    ["won't","will not"],
+    ["don't","do not"],
+    ["doesn't","does not"],
+    ["didn't","did not"],
+    ["i'm","i am"],
+    ["you're","you are"],
+    ["he's","he is"],
+    ["she's","she is"],
+    ["it's","it is"],
+    ["we're","we are"],
+    ["they're","they are"],
+    ["isn't","is not"],
+    ["aren't","are not"],
+    ["wasn't","was not"],
+    ["weren't","were not"],
+    ["i've","i have"],
+    ["you've","you have"],
+    ["we've","we have"],
+    ["they've","they have"],
+    ["i'll","i will"],
+    ["you'll","you will"],
+    ["we'll","we will"],
+    ["they'll","they will"],
+    ["gonna","going to"],
+    ["wanna","want to"],
+    ["gotta","got to"]
+  ];
+
+  function normalize(s){
+    if(!s) return "";
+    s = String(s).toLowerCase().trim();
+    s = s.replace(/[’]/g, "'");
+    for (const [a,b] of CONTRACTIONS){
+      s = s.replaceAll(a, b);
     }
-    if (recognizer) return true;
+    // remove punctuation
+    s = s.replace(/[^a-z0-9\s']/g, " ");
+    s = s.replace(/\s+/g, " ").trim();
+    return s;
+  }
 
-    recognizer = new SR();
-    recognizer.lang = selRecLang.value || "en-US";
-    recognizer.interimResults = false;
-    recognizer.continuous = false;
+  function tokens(s){
+    s = normalize(s);
+    if(!s) return [];
+    return s.split(" ").filter(Boolean);
+  }
 
-    recognizer.onresult = (e) => {
-      const t = (e.results && e.results[0] && e.results[0][0]) ? e.results[0][0].transcript : "";
-      heardText.value = t;
-      setStatus("Heard. Press Check.", "ok");
-    };
-
-    recognizer.onerror = (e) => {
-      sessionActive = false;
-      btnMic.textContent = "🎙️ Start mic";
-      const err = (e && e.error) ? String(e.error) : "unknown";
-      if (err === "not-allowed" || err === "service-not-allowed" || err === "permission-denied") {
-        setStatus("Mic blocked. Allow microphone permission in the browser.", "warn");
-        return;
+  // LCS length (sequence order) for token arrays
+  function lcsLen(a, b){
+    const n=a.length, m=b.length;
+    if(!n || !m) return 0;
+    // DP with rolling arrays
+    let prev = new Array(m+1).fill(0);
+    let cur  = new Array(m+1).fill(0);
+    for(let i=1;i<=n;i++){
+      cur[0]=0;
+      for(let j=1;j<=m;j++){
+        cur[j] = (a[i-1]===b[j-1]) ? prev[j-1]+1 : Math.max(prev[j], cur[j-1]);
       }
-      setStatus(`Mic error: ${err}`, "warn");
+      const tmp=prev; prev=cur; cur=tmp;
+    }
+    return prev[m];
+  }
+
+  function similarity(expected, heard){
+    const a=tokens(expected);
+    const b=tokens(heard);
+    if(!a.length && !b.length) return 1;
+    if(!a.length || !b.length) return 0;
+    const l=lcsLen(a,b);
+    // F1-like ratio, tolerant to extra/missing words
+    return (2*l) / (a.length + b.length);
+  }
+
+  function diffMarkup(expected, heard){
+    const a=tokens(expected);
+    const b=tokens(heard);
+    if(!a.length) return "<span class='wMuted'>—</span>";
+
+    // mark expected words that are missing in heard (order-sensitive)
+    let bi=0;
+    const out=[];
+    for (let i=0;i<a.length;i++){
+      const w=a[i];
+      // find w in b from bi onward
+      let found=false;
+      for(let j=bi;j<b.length;j++){
+        if (b[j]===w){ found=true; bi=j+1; break; }
+      }
+      if (found) out.push("<span class='wOk'>"+escapeHtml(w)+"</span>");
+      else out.push("<span class='wBad'>"+escapeHtml(w)+"</span>");
+    }
+    return out.join(" ");
+  }
+
+  function escapeHtml(s){
+    return String(s)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+
+  // -------------------------
+  // Sentence generator (segments)
+  // -------------------------
+  const LEX = {
+    S: [
+      {en:"I", es:"Yo"},
+      {en:"You", es:"Tú"},
+      {en:"He", es:"Él"},
+      {en:"She", es:"Ella"},
+      {en:"We", es:"Nosotros"},
+      {en:"They", es:"Ellos"},
+    ],
+    V: [
+      {base:"work", past:"worked", pp:"worked", es:"trabajar"},
+      {base:"study", past:"studied", pp:"studied", es:"estudiar"},
+      {base:"practice", past:"practiced", pp:"practiced", es:"practicar"},
+      {base:"create", past:"created", pp:"created", es:"crear"},
+      {base:"build", past:"built", pp:"built", es:"construir"},
+      {base:"learn", past:"learned", pp:"learned", es:"aprender"},
+      {base:"watch", past:"watched", pp:"watched", es:"ver"},
+      {base:"write", past:"wrote", pp:"written", es:"escribir"},
+      {base:"draw", past:"drew", pp:"drawn", es:"dibujar"},
+      {base:"animate", past:"animated", pp:"animated", es:"animar"},
+      {base:"call", past:"called", pp:"called", es:"llamar"},
+      {base:"help", past:"helped", pp:"helped", es:"ayudar"},
+      {base:"fix", past:"fixed", pp:"fixed", es:"arreglar"},
+      {base:"clean", past:"cleaned", pp:"cleaned", es:"limpiar"},
+      {base:"plan", past:"planned", pp:"planned", es:"planear"},
+      {base:"cook", past:"cooked", pp:"cooked", es:"cocinar"},
+      {base:"drive", past:"drove", pp:"driven", es:"conducir"},
+      {base:"meet", past:"met", pp:"met", es:"conocer"},
+      {base:"choose", past:"chose", pp:"chosen", es:"elegir"},
+      {base:"bring", past:"brought", pp:"brought", es:"traer"},
+      {base:"make", past:"made", pp:"made", es:"hacer"},
+      {base:"take", past:"took", pp:"taken", es:"tomar"},
+      {base:"give", past:"gave", pp:"given", es:"dar"},
+      {base:"find", past:"found", pp:"found", es:"encontrar"},
+      {base:"say", past:"said", pp:"said", es:"decir"},
+      {base:"tell", past:"told", pp:"told", es:"contar"},
+    ],
+    O: [
+      {en:"on a new lesson", es:"en una nueva lección"},
+      {en:"on this project", es:"en este proyecto"},
+      {en:"English every day", es:"inglés todos los días"},
+      {en:"a short sentence", es:"una frase corta"},
+      {en:"a longer sentence", es:"una frase más larga"},
+      {en:"my pronunciation", es:"mi pronunciación"},
+      {en:"the timeline", es:"la línea de tiempo"},
+      {en:"the animations", es:"las animaciones"},
+      {en:"the script", es:"el script"},
+      {en:"a new idea", es:"una nueva idea"},
+    ],
+    P: [
+      {en:"at home", es:"en casa"},
+      {en:"in the morning", es:"en la mañana"},
+      {en:"after class", es:"después de clase"},
+      {en:"with my team", es:"con mi equipo"},
+      {en:"today", es:"hoy"},
+      {en:"right now", es:"ahora mismo"},
+      {en:"every week", es:"cada semana"},
+    ],
+    WH: [
+      {en:"Why", es:"Por qué"},
+      {en:"When", es:"Cuándo"},
+      {en:"Where", es:"Dónde"},
+      {en:"How", es:"Cómo"},
+      {en:"What", es:"Qué"},
+    ]
+  };
+
+  function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+  function joinParts(parts){
+    // join with spaces, then fix punctuation spacing
+    return parts.join(" ")
+      .replace(/\s+,/g, ",")
+      .replace(/\s+\./g, ".")
+      .replace(/\s+\?/g, "?")
+      .replace(/\s+!/g, "!")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function segmentsFromParts(partsEn, partsEs){
+    const n = partsEn.length;
+    const maxSeg = 10;
+
+    const start = Math.min(2, n); // subject + (aux/verb)
+    let cutPoints = [];
+
+    if (n <= start) {
+      cutPoints = [n];
+    } else if (n <= maxSeg) {
+      for (let i=start; i<=n; i++) cutPoints.push(i);
+    } else {
+      // distribute to maxSeg segments
+      cutPoints.push(start);
+      const remaining = n - start;
+      const segsLeft = maxSeg - 1;
+      for (let k=1; k<=segsLeft; k++){
+        const b = start + Math.round((remaining * k) / segsLeft);
+        cutPoints.push(b);
+      }
+      // ensure increasing & unique
+      cutPoints = cutPoints.filter((v,i,a)=> i===0 || v>a[i-1]);
+      if (cutPoints[cutPoints.length-1] !== n) cutPoints.push(n);
+    }
+
+    const segEn = cutPoints.map(b => joinParts(partsEn.slice(0,b)));
+    const segEs = cutPoints.map(b => joinParts(partsEs.slice(0,b)));
+    return { segEn, segEs, fullEn: joinParts(partsEn), fullEs: joinParts(partsEs) };
+  }
+
+  function makeExercise(){
+    const mode = el.modeSel.value;
+    const qType = el.qTypeSel.value;
+    const tense = el.tenseSel.value;
+
+    if (mode === "questions") return genQuestion(tense, qType);
+    return genStatement(tense);
+  }
+
+  function genStatement(tenseKey){
+    const S = pick(LEX.S);
+    const V = pick(LEX.V);
+    const O = pick(LEX.O);
+    const P = pick(LEX.P);
+
+    const partsEn = [];
+    const partsEs = [];
+
+    // Helpers
+    const is3s = (S.en === "He" || S.en === "She");
+
+    const v3s = () => {
+      if (!is3s) return V.base;
+      if (V.base.endsWith("y")) return V.base.slice(0,-1) + "ies";
+      if (/(s|x|sh|ch|o)$/.test(V.base)) return V.base + "es";
+      return V.base + "s";
     };
 
-    recognizer.onend = () => {
-      // When it ends, we stop. User can press Start again.
-      if (sessionActive){
-        sessionActive = false;
-        btnMic.textContent = "🎙️ Start mic";
+    if (tenseKey === "present_simple"){
+      partsEn.push(S.en, v3s(), O.en, P.en, ".");
+      partsEs.push(S.es, V.es, O.es, P.es, ".");
+    }
+    else if (tenseKey === "present_continuous"){
+      const be = (S.en==="I")?"am":(is3s?"is":"are");
+      partsEn.push(S.en, be, V.base+"ing", O.en, P.en, ".");
+      partsEs.push(S.es, "estoy/está/están", V.es+"ndo", O.es, P.es, ".");
+    }
+    else if (tenseKey === "past_simple"){
+      partsEn.push(S.en, V.past, O.en, P.en, ".");
+      partsEs.push(S.es, "pasado", V.es, O.es, P.es, ".");
+    }
+    else if (tenseKey === "past_continuous"){
+      const wasWere = (S.en==="I"||is3s)?"was":"were";
+      partsEn.push(S.en, wasWere, V.base+"ing", O.en, P.en, ".");
+      partsEs.push(S.es, "estaba/estaban", V.es+"ndo", O.es, P.es, ".");
+    }
+    else if (tenseKey === "present_perfect"){
+      const have = (S.en==="He"||S.en==="She") ? "has" : "have";
+      partsEn.push(S.en, have, V.pp, O.en, "already", ".");
+      partsEs.push(S.es, "he/ha", V.es, O.es, "ya", ".");
+    }
+    else if (tenseKey === "future_will"){
+      partsEn.push(S.en, "will", V.base, O.en, "tomorrow", ".");
+      partsEs.push(S.es, "voy a", V.es, O.es, "mañana", ".");
+    }
+    else if (tenseKey === "modals"){
+      const modal = pick([{en:"can", es:"puedo"}, {en:"should", es:"debería"}, {en:"must", es:"debo"}, {en:"might", es:"podría"}]);
+      partsEn.push(S.en, modal.en, V.base, O.en, P.en, ".");
+      partsEs.push(S.es, modal.es, V.es, O.es, P.es, ".");
+    }
+    else if (tenseKey === "conditional_0"){
+      // If + present, present
+      const S2 = pick(LEX.S);
+      const V2 = pick(LEX.V);
+      partsEn.push("If", S.en.toLowerCase(), v3s(), O.en, ",", S2.en.toLowerCase(), (S2.en==="He"||S2.en==="She")? (V2.base+"s") : V2.base, P.en, ".");
+      partsEs.push("Si", S.es.toLowerCase(), V.es, O.es, ",", S2.es.toLowerCase(), V2.es, P.es, ".");
+    }
+    else if (tenseKey === "conditional_1"){
+      // If + present, will + base
+      const S2 = pick(LEX.S);
+      const V2 = pick(LEX.V);
+      partsEn.push("If", S.en.toLowerCase(), v3s(), O.en, ",", S2.en.toLowerCase(), "will", V2.base, P.en, ".");
+      partsEs.push("Si", S.es.toLowerCase(), V.es, O.es, ",", S2.es.toLowerCase(), "voy a", V2.es, P.es, ".");
+    }
+    else if (tenseKey === "conditional_2"){
+      // If + past, would + base
+      const S2 = pick(LEX.S);
+      const V2 = pick(LEX.V);
+      partsEn.push("If", S.en.toLowerCase(), V.past, O.en, ",", S2.en.toLowerCase(), "would", V2.base, P.en, ".");
+      partsEs.push("Si", S.es.toLowerCase(), "pasado", V.es, O.es, ",", S2.es.toLowerCase(), "haría", V2.es, P.es, ".");
+    }
+    else{
+      partsEn.push(S.en, v3s(), O.en, ".");
+      partsEs.push(S.es, V.es, O.es, ".");
+    }
+
+    return segmentsFromParts(partsEn, partsEs);
+  }
+
+  function genQuestion(tenseKey, qType){
+    const S = pick(LEX.S);
+    const V = pick(LEX.V);
+    const O = pick(LEX.O);
+    const P = pick(LEX.P);
+    const WH = pick(LEX.WH);
+
+    const is3s = (S.en === "He" || S.en === "She");
+
+    const partsEn = [];
+    const partsEs = [];
+
+    // yes/no base (present)
+    const doAux = is3s ? "Does" : "Do";
+
+    if (qType === "wh"){
+      if (tenseKey === "past_simple"){
+        partsEn.push(WH.en, "did", S.en.toLowerCase(), V.base, O.en, P.en, "?");
+        partsEs.push(WH.es, "hizo", S.es.toLowerCase(), V.es, O.es, P.es, "?");
+      }else{
+        partsEn.push(WH.en, doAux.toLowerCase(), S.en.toLowerCase(), V.base, O.en, P.en, "?");
+        partsEs.push(WH.es, doAux.toLowerCase(), S.es.toLowerCase(), V.es, O.es, P.es, "?");
+      }
+    } else {
+      if (tenseKey === "past_simple"){
+        partsEn.push("Did", S.en.toLowerCase(), V.base, O.en, P.en, "?");
+        partsEs.push("¿", S.es.toLowerCase(), "hizo", V.es, O.es, P.es, "?");
+      } else if (tenseKey === "present_continuous"){
+        const be = (S.en==="I")?"Am":(is3s?"Is":"Are");
+        partsEn.push(be, S.en.toLowerCase(), V.base+"ing", O.en, P.en, "?");
+        partsEs.push("¿", S.es.toLowerCase(), "estoy/está/están", V.es+"ndo", O.es, P.es, "?");
+      } else if (tenseKey === "present_perfect"){
+        const have = (S.en==="He"||S.en==="She") ? "Has" : "Have";
+        partsEn.push(have, S.en.toLowerCase(), V.pp, O.en, "already", "?");
+        partsEs.push("¿", S.es.toLowerCase(), "he/ha", V.es, O.es, "ya", "?");
+      } else {
+        partsEn.push(doAux, S.en.toLowerCase(), V.base, O.en, P.en, "?");
+        partsEs.push("¿", doAux.toLowerCase(), S.es.toLowerCase(), V.es, O.es, P.es, "?");
+      }
+    }
+
+    return segmentsFromParts(partsEn, partsEs);
+  }
+
+  // -------------------------
+  // UI sync
+  // -------------------------
+  function currentTargetEn(){
+    return state.ex.segmentsEn[Math.min(state.ex.idx, state.ex.segmentsEn.length-1)] || "—";
+  }
+  function currentTargetEs(){
+    return state.ex.segmentsEs[Math.min(state.ex.idx, state.ex.segmentsEs.length-1)] || "—";
+  }
+
+  function syncUI(){
+    el.levelVal.textContent = state.level;
+    el.scoreVal.textContent = state.score;
+    el.streakVal.textContent = state.streak;
+    el.tolVal.textContent = state.tol.toFixed(2);
+
+    const target = currentTargetEn();
+    el.targetText.textContent = target;
+
+    if (state.showTranslation){
+      el.targetHint.innerHTML = "<span class='wMuted'>ES:</span> " + escapeHtml(currentTargetEs());
+    } else if (state.showAnswer){
+      el.targetHint.innerHTML = "<span class='wMuted'>Answer:</span> " + escapeHtml(state.ex.fullEn);
+    } else {
+      el.targetHint.innerHTML = "Say it, then press <b>Check</b>. (It grows as you pass.)";
+    }
+  }
+
+  // -------------------------
+  // Exercise flow
+  // -------------------------
+  function startNewExercise(){
+    const ex = makeExercise();
+    state.ex.segmentsEn = ex.segEn;
+    state.ex.segmentsEs = ex.segEs;
+    state.ex.fullEn = ex.fullEn;
+    state.ex.fullEs = ex.fullEs;
+    state.ex.idx = 0;
+    state.showTranslation = false;
+    state.showAnswer = false;
+
+    el.heardInput.value = "";
+    el.wordFeedback.innerHTML = "<span class='wMuted'>—</span>";
+    el.statusLine.textContent = "New target. Start with the short version.";
+    syncUI();
+  }
+
+  function advanceSegment(){
+    state.ex.idx += 1;
+    if (state.ex.idx >= state.ex.segmentsEn.length){
+      // sentence completed
+      state.streak += 1;
+      el.statusLine.textContent = "Nice! Full sentence completed. New one…";
+      startNewExercise();
+      return;
+    }
+    el.statusLine.textContent = "Good. Now say the longer version.";
+    syncUI();
+  }
+
+  function addPoint(){
+    state.score += 1;
+    if (state.score >= 100){
+      // reward
+      state.score = 0;
+      state.level += 1;
+      const won = unlockNextCharacter();
+      if (won) showReward(won);
+      else showReward({ name:"All characters", file:"bombardino.png", id:"all" }, true);
+
+      saveProgress();
+    } else {
+      saveProgress();
+    }
+    syncUI();
+  }
+
+  // -------------------------
+  // Modal reward
+  // -------------------------
+  function showReward(ch, allDone=false){
+    el.modalTitle.textContent = "You rescued a character!";
+    el.modalName.textContent = ch.name || "New character";
+    const msg = allDone
+      ? "Legendary! You unlocked everyone."
+      : "Amazing! Keep going — you won " + (ch.name || "a character") + ".";
+    el.modalMsg.textContent = msg;
+
+    const imgFile = ch.file || "bombardino.png";
+    el.modalImg.src = assetUrl("assets/medals/" + imgFile);
+
+    el.modal.classList.remove("hidden");
+    // speak reward
+    speakText(msg);
+  }
+
+  function hideReward(){
+    el.modal.classList.add("hidden");
+  }
+
+  // -------------------------
+  // TTS
+  // -------------------------
+  function refreshVoices(){
+    const list = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+    state.voices = list || [];
+    el.voiceSel.innerHTML = "";
+
+    // prefer English voices
+    const sorted = [...state.voices].sort((a,b) => {
+      const aEn = (a.lang||"").startsWith("en") ? 0 : 1;
+      const bEn = (b.lang||"").startsWith("en") ? 0 : 1;
+      return aEn - bEn;
+    });
+
+    sorted.forEach((v, idx) => {
+      const opt = document.createElement("option");
+      opt.value = String(idx);
+      opt.textContent = (v.name || "Voice") + " — " + (v.lang || "");
+      el.voiceSel.appendChild(opt);
+    });
+  }
+
+  function selectedVoice(){
+    const list = [...state.voices];
+    const idx = parseInt(el.voiceSel.value || "0", 10);
+    // voiceSel is built from sorted list; rebuild same order
+    const sorted = [...list].sort((a,b) => {
+      const aEn = (a.lang||"").startsWith("en") ? 0 : 1;
+      const bEn = (b.lang||"").startsWith("en") ? 0 : 1;
+      return aEn - bEn;
+    });
+    return sorted[idx] || null;
+  }
+
+  function speakText(text){
+    if (!window.speechSynthesis) return;
+    const t = String(text || "").trim();
+    if (!t) return;
+
+    // anti-echo: stop mic while speaking
+    if (el.antiEchoChk.checked && state.micActive){
+      state.micWasActiveBeforeTTS = true;
+      stopMic();
+    } else {
+      state.micWasActiveBeforeTTS = false;
+    }
+
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(t);
+    const v = selectedVoice();
+    if (v) u.voice = v;
+    u.rate = 1.0;
+    u.pitch = 1.0;
+
+    u.onend = () => {
+      if (el.antiEchoChk.checked && state.micWasActiveBeforeTTS){
+        startMic();
       }
     };
 
-    return true;
+    window.speechSynthesis.speak(u);
+  }
+
+  // -------------------------
+  // STT (SpeechRecognition)
+  // -------------------------
+  function setupRecognition(){
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+
+    const rec = new SR();
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.maxAlternatives = 3;
+
+    rec.onresult = (ev) => {
+      let finalTxt = "";
+      let interim = "";
+      for (let i=ev.resultIndex; i<ev.results.length; i++){
+        const r = ev.results[i];
+        const txt = r[0] ? r[0].transcript : "";
+        if (r.isFinal) finalTxt += txt + " ";
+        else interim += txt + " ";
+      }
+      const out = (finalTxt || interim).trim();
+      if (out) el.heardInput.value = out;
+      el.statusLine.textContent = out ? "Heard: " + out : "Listening…";
+    };
+
+    rec.onerror = (ev) => {
+      state.micActive = false;
+      el.micBtn.textContent = "🎙️ Start mic";
+      el.statusLine.textContent = "Mic error: " + (ev.error || "unknown");
+    };
+
+    rec.onend = () => {
+      state.micActive = false;
+      el.micBtn.textContent = "🎙️ Start mic";
+      el.statusLine.textContent = "Mic stopped.";
+    };
+
+    state.recognition = rec;
   }
 
   function startMic(){
-    if (!ensureRecognizer()) return;
-    recognizer.lang = selRecLang.value || "en-US";
-
-    if (chkAntiEcho.checked && ttsSpeaking){
-      setStatus("Wait—voice is speaking.", "warn");
-      return;
+    if (!state.recognition){
+      setupRecognition();
+      if (!state.recognition){
+        el.statusLine.textContent = "SpeechRecognition not supported in this browser.";
+        return;
+      }
     }
-
-    sessionActive = true;
-    btnMic.textContent = "🛑 Stop mic";
-    setStatus("Listening… speak now.", "muted");
-
     try{
-      recognizer.start();
-    }catch(err){
-      sessionActive = false;
-      btnMic.textContent = "🎙️ Start mic";
-      setStatus("Mic start failed. Try again.", "warn");
+      state.recognition.lang = el.recLangSel.value || "en-US";
+      state.recognition.start();
+      state.micActive = true;
+      el.micBtn.textContent = "🛑 Stop mic";
+      el.statusLine.textContent = "Listening…";
+    }catch(e){
+      // Sometimes start() throws if called twice quickly
+      el.statusLine.textContent = "Mic busy. Try again.";
+      state.micActive = false;
+      el.micBtn.textContent = "🎙️ Start mic";
     }
   }
 
   function stopMic(){
-    sessionActive = false;
-    btnMic.textContent = "🎙️ Start mic";
-    try{ recognizer && recognizer.stop(); }catch(e){}
-    setStatus("Stopped.", "muted");
+    try{ state.recognition && state.recognition.stop(); }catch(e){}
+    state.micActive = false;
+    el.micBtn.textContent = "🎙️ Start mic";
   }
 
-  // =========================
-  // Translate (glossary)
-  // =========================
-  function showGlossary(){
-    const words = tokenize(currentTarget);
-    const uniq = [...new Set(words)].slice(0, 20);
-    const lines = uniq.map(w => `${w} = ${ES[w] || "—"}`);
-    glossary.innerHTML = `<b>ES glossary:</b><br>` + lines.join("<br>");
-    glossary.hidden = false;
+  function toggleMic(){
+    if (state.micActive) stopMic();
+    else startMic();
   }
 
-  // =========================
-  // Check & feedback
-  // =========================
-  function diffWords(expected, got){
-    const e = tokenize(expected);
-    const g = tokenize(got);
-    const bad = new Set();
+  // -------------------------
+  // Check logic (with growing target)
+  // -------------------------
+  function doCheck(){
+    const expected = currentTargetEn();
+    const heard = el.heardInput.value || "";
 
-    // simple alignment by position
-    const n = Math.max(e.length, g.length);
-    for (let i=0;i<n;i++){
-      if ((e[i]||"") !== (g[i]||"")){
-        if (e[i]) bad.add(e[i]);
-      }
-    }
-    return { e, g, bad:[...bad] };
-  }
+    const sim = similarity(expected, heard);
+    const ok = sim >= state.tol;
 
-  function renderFeedback(expected, heard){
-    const { bad } = diffWords(expected, heard);
-    if (!heard.trim()){
-      feedback.innerHTML = "—";
-      return;
-    }
-    if (bad.length === 0){
-      feedback.innerHTML = `<span style="color:var(--ok); font-weight:900;">Perfect!</span> ✅`;
-      return;
-    }
-    const html = bad.map(w => `<span style="color:var(--warn); font-weight:900;">${w}</span>`).join(", ");
-    feedback.innerHTML = `Practice these words: ${html}`;
-  }
+    // word feedback
+    el.wordFeedback.innerHTML = diffMarkup(expected, heard) +
+      "<div class='wMuted' style='margin-top:8px'>Similarity: <b>" + sim.toFixed(2) + "</b> (tol " + state.tol.toFixed(2) + ")</div>";
 
-  function nextLevel(){
-    level++;
-    if (level > MAX_LEVEL){
-      level = MAX_LEVEL;
-      // unlock only when unit score reached 100 and not already completed
-      if (!unitCompleted && Number.isFinite(score) && score >= MAX_LEVEL){
-        unitCompleted = true;
-        tryUnlockAtUnitEnd();
-      }
+    if (ok){
+      addPoint();
+      advanceSegment();
+      el.statusLine.textContent = "✅ Correct! +" + 1 + " pt";
     } else {
-      currentTarget = levels[level-1];
-      currentTokens = tokenize(currentTarget);
+      state.streak = 0;
+      el.statusLine.textContent = "❌ Almost. Try again (say it slower).";
+      syncUI();
     }
-    renderTarget();
-    renderHud();
   }
 
-  // =========================
-  // Unit generation
-  // =========================
-  let levels = [];
+  function doSkip(){
+    state.streak = 0;
+    startNewExercise();
+  }
+
+  // -------------------------
+  // Settings + toggles
+  // -------------------------
+  function setTol(val){
+    const n = Math.max(0.55, Math.min(0.90, Number(val)));
+    state.tol = n;
+    el.tolRange.value = String(n);
+    el.tolLabel.textContent = n.toFixed(2);
+    syncUI();
+  }
+
+  function refreshModeUI(){
+    const mode = el.modeSel.value;
+    el.qTypeField.style.display = (mode === "questions") ? "" : "none";
+    startNewExercise();
+  }
 
   function newUnit(){
-    // hard reset
-    unitCompleted = false;
-    modal.hidden = true;
-    level = 1;
-    score = 0;
-    streak = 0;
-    heardText.value = "";
-    feedback.innerHTML = "—";
-    glossary.hidden = true;
-
-    const mode = selMode.value;
-    const qType = selQType.value;
-    const tense = selTense.value;
-
-    const base = buildBase(mode, qType, tense);
-    levels = buildLevels(base, mode);
-
-    currentTarget = levels[0];
-    currentTokens = tokenize(currentTarget);
-    targetText.textContent = currentTarget;
-
-    setStatus("New unit ready.", "ok");
-    renderStats();
+    // Just reset score inside unit (keeps unlocked medals)
+    state.score = 0;
+    state.streak = 0;
+    saveProgress();
+    el.statusLine.textContent = "New unit started.";
+    startNewExercise();
+    syncUI();
   }
 
-  // =========================
+  // -------------------------
   // Events
-  // =========================
-  btnNew.addEventListener("click", newUnit);
-
-  btnSpeak.addEventListener("click", () => speak(currentTarget));
-
-  btnMic.addEventListener("click", () => {
-    if (sessionActive) stopMic();
-    else startMic();
+  // -------------------------
+  el.checkBtn.addEventListener("click", doCheck);
+  el.skipBtn.addEventListener("click", doSkip);
+  el.micBtn.addEventListener("click", toggleMic);
+  el.speakBtn.addEventListener("click", () => speakText(currentTargetEn()));
+  el.translateBtn.addEventListener("click", () => {
+    state.showTranslation = !state.showTranslation;
+    state.showAnswer = false;
+    syncUI();
   });
-
-  btnTranslate.addEventListener("click", () => {
-    // glossary instead of unreliable full translation
-    showGlossary();
+  el.answerBtn.addEventListener("click", () => {
+    state.showAnswer = !state.showAnswer;
+    state.showTranslation = false;
+    syncUI();
   });
+  el.newUnitBtn.addEventListener("click", newUnit);
 
-  btnShow.addEventListener("click", () => {
-    heardText.value = currentTarget;
-    setStatus("Answer shown.", "muted");
-  });
+  el.modeSel.addEventListener("change", refreshModeUI);
+  el.qTypeSel.addEventListener("change", startNewExercise);
+  el.tenseSel.addEventListener("change", startNewExercise);
+  el.recLangSel.addEventListener("change", () => { if (state.micActive) { stopMic(); startMic(); }});
+  el.tolRange.addEventListener("input", (e) => setTol(e.target.value));
 
-  btnCheck.addEventListener("click", () => {
-    const heard = heardText.value || "";
-    renderFeedback(currentTarget, heard);
+  el.modalOk.addEventListener("click", hideReward);
+  el.modal.querySelector(".modalBackdrop").addEventListener("click", hideReward);
 
-    const { bad } = diffWords(currentTarget, heard);
-    if (heard.trim() && bad.length === 0){
-      streak++;
-      score += 10 + Math.min(streak*2, 10);
-      setStatus("Nice! +score. Next level.", "ok");
-      nextLevel();
-    } else {
-      streak = 0;
-      setStatus("Not yet—fix the red words and try again.", "warn");
-    }
-    renderStats();
-  });
-
-  btnSkip.addEventListener("click", () => {
-    streak = 0;
-    setStatus("Skipped.", "muted");
-    nextLevel();
-  });
-
-  selVoice.addEventListener("change", selectVoice);
-  selRecLang.addEventListener("change", () => { if (recognizer) recognizer.lang = selRecLang.value; });
-
-  btnModalOk.addEventListener("click", () => {
-    closeModal();
-    // after unlock, start a new unit
-    if (unitCompleted){
-      // Start next unit manually (keeps state stable)
-      setStatus("Unit complete! Press New unit to continue.", "ok");
+  // keyboard help
+  el.heardInput.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter"){
+      e.preventDefault();
+      doCheck();
     }
   });
 
-  // Voices load
-  if (window.speechSynthesis){
-    speechSynthesis.onvoiceschanged = loadVoices;
-    loadVoices();
+  // -------------------------
+  // Init
+  // -------------------------
+  function init(){
+    loadProgress();
+    setTol(state.tol);
+    renderMedals();
+    refreshModeUI();
+
+    // voices may load async
+    refreshVoices();
+    if (window.speechSynthesis){
+      window.speechSynthesis.onvoiceschanged = () => refreshVoices();
+    }
+    syncUI();
   }
 
-  // Init
-  renderMedals();
-  medalCount.textContent = `${unlocked.size}/${MEDAL_ROSTER.length}`;
-  newUnit();
+  init();
 })();
