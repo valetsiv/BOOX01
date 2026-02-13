@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Tense Builder</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="dot"></div>
+      <div>
+        <div class="brandTitle">Tense Builder</div>
+        <div class="brandSub">Speak • Compare • Level up</div>
+      </div>
+    </div>
+
+    <div class="topActions">
+      <button id="btnNew" class="btn primary">New unit</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- LEFT: game -->
+    <section class="card">
+      <div class="cardHead">
+        <div>
+          <div class="h1">Current target</div>
+          <div class="muted">Listen → speak → check → get feedback (words in red = practice)</div>
+        </div>
+        <div class="stats">
+          <div class="pill"><div class="k">Level</div><div id="statLevel" class="v">1</div></div>
+          <div class="pill"><div class="k">Score</div><div id="statScore" class="v">0</div></div>
+          <div class="pill"><div class="k">Streak</div><div id="statStreak" class="v">0</div></div>
+        </div>
+      </div>
+
+      <div class="targetBox">
+        <div id="targetText" class="targetText">—</div>
+        <div id="glossary" class="glossary" hidden></div>
+      </div>
+
+      <div class="rowBtns">
+        <button id="btnSpeak" class="btn">🔊 Speak</button>
+        <button id="btnMic" class="btn">🎙️ Start mic</button>
+        <button id="btnTranslate" class="btn ghost">🌐 Translate</button>
+        <button id="btnShow" class="btn ghost">👁 Show answer</button>
+      </div>
+
+      <div class="grid2">
+        <div class="cardMini">
+          <div class="h2">What the mic heard</div>
+          <textarea id="heardText" class="ta" placeholder="Press Start mic, speak, then press Check…"></textarea>
+          <div class="rowBtns2">
+            <button id="btnCheck" class="btn ok">✅ Check</button>
+            <button id="btnSkip" class="btn ghost">⏭ Skip</button>
+          </div>
+          <div id="status" class="status">Ready.</div>
+        </div>
+
+        <div class="cardMini">
+          <div class="h2">Word feedback</div>
+          <div id="feedback" class="feedback">—</div>
+        </div>
+      </div>
+
+      <div class="medalsHead">
+        <div>
+          <div class="h2">Rescued characters</div>
+          <div class="muted">Finish Level 100 to unlock a character.</div>
+        </div>
+        <div id="medalCount" class="muted">0/0</div>
+      </div>
+      <div id="medals" class="medals"></div>
+    </section>
+
+    <!-- RIGHT: settings -->
+    <aside class="card settings">
+      <div class="h1">Settings</div>
+
+      <div class="field">
+        <label>Mode</label>
+        <select id="selMode">
+          <option value="statements">Statements</option>
+          <option value="questions">Questions</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Question type</label>
+        <select id="selQType">
+          <option value="yesno">Yes/No (Do/Does/Did/Have…)</option>
+          <option value="wh">WH (What/Where/When/Why/How…)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Tense</label>
+        <select id="selTense">
+          <option value="present_simple">Present Simple</option>
+          <option value="present_cont">Present Continuous</option>
+          <option value="past_cont">Past Continuous</option>
+          <option value="present_perf">Present Perfect</option>
+          <option value="future_will">Future (will)</option>
+          <option value="conditional_0">Conditional 0</option>
+          <option value="conditional_1">Conditional 1</option>
+          <option value="conditional_2">Conditional 2</option>
+          <option value="modals">Modals (can/should/must/might)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Voice (TTS)</label>
+        <select id="selVoice"></select>
+      </div>
+
+      <div class="field">
+        <label>Recognition language</label>
+        <select id="selRecLang">
+          <option value="en-US">English (US)</option>
+          <option value="en-GB">English (UK)</option>
+        </select>
+      </div>
+
+      <div class="field row">
+        <label class="toggle">
+          <input id="chkAntiEcho" type="checkbox" checked />
+          <span>Anti‑echo (pause mic while TTS)</span>
+        </label>
+      </div>
+
+      <div class="divider"></div>
+      <div class="muted small">
+        Tip: If you open as <b>file://</b>, Chrome may ask mic permission more often.
+        Best: open with <b>http://localhost</b>.
+      </div>
+    </aside>
+  </main>
+
+  <!-- Unlock modal -->
+  <div id="modal" class="modal" hidden>
+    <div class="modalCard">
+      <div class="modalTitle">You rescued a character!</div>
+      <div class="modalBody">
+        <img id="modalImg" class="modalImg" alt="medal" />
+        <div id="modalText" class="modalText"></div>
+      </div>
+      <button id="btnModalOk" class="btn primary">Awesome</button>
+    </div>
+  </div>
+
+  <script src="app_routes_fixed.js"></script>
+</body>
+</html>
